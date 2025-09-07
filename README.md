@@ -1,2 +1,0 @@
-# sharingansnakegame
-Snake game

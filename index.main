@@ -1,0 +1,366 @@
+```jsx
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+
+const GRID_SIZE = 20;
+const INITIAL_SNAKE = [{ x: 10, y: 10 }];
+const INITIAL_FOOD = { x: 15, y: 15 };
+const INITIAL_SHARINGAN = { x: 5, y: 5, active: false };
+const GAME_SPEED = 150;
+
+const App = () => {
+  const [snake, setSnake] = useState(INITIAL_SNAKE);
+  const [food, setFood] = useState(INITIAL_FOOD);
+  const [sharingan, setSharingan] = useState(INITIAL_SHARINGAN);
+  const [direction, setDirection] = useState({ x: 0, y: 1 });
+  const [gameRunning, setGameRunning] = useState(false);
+  const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+  const gameLoopRef = useRef();
+
+  const generateRandomPosition = useCallback(() => {
+    return {
+      x: Math.floor(Math.random() * GRID_SIZE),
+      y: Math.floor(Math.random() * GRID_SIZE),
+    };
+  }, []);
+
+  const generateFood = useCallback(() => {
+    let newFood;
+    do {
+      newFood = generateRandomPosition();
+    } while (
+      snake.some(segment => segment.x === newFood.x && segment.y === newFood.y)
+    );
+    return newFood;
+  }, [snake, generateRandomPosition]);
+
+  const generateSharingan = useCallback(() => {
+    if (Math.random() < 0.3) { // 30% chance to appear
+      let newSharingan;
+      do {
+        newSharingan = generateRandomPosition();
+      } while (
+        snake.some(segment => segment.x === newSharingan.x && segment.y === newSharingan.y) ||
+        (food.x === newSharingan.x && food.y === newSharingan.y)
+      );
+      return { ...newSharingan, active: true };
+    }
+    return { ...sharingan, active: false };
+  }, [snake, food, sharingan, generateRandomPosition]);
+
+  const resetGame = () => {
+    setSnake(INITIAL_SNAKE);
+    setFood(INITIAL_FOOD);
+    setSharingan(INITIAL_SHARINGAN);
+    setDirection({ x: 0, y: 1 });
+    setScore(0);
+    setGameOver(false);
+  };
+
+  const startGame = () => {
+    resetGame();
+    setGameRunning(true);
+  };
+
+  const moveSnake = useCallback(() => {
+    if (!gameRunning || gameOver) return;
+
+    setSnake(currentSnake => {
+      const newSnake = [...currentSnake];
+      const head = { ...newSnake[0] };
+      
+      head.x += direction.x;
+      head.y += direction.y;
+
+      // Check wall collision
+      if (head.x < 0 || head.x >= GRID_SIZE || head.y < 0 || head.y >= GRID_SIZE) {
+        setGameRunning(false);
+        setGameOver(true);
+        if (score > highScore) setHighScore(score);
+        return currentSnake;
+      }
+
+      // Check self collision
+      if (newSnake.some(segment => segment.x === head.x && segment.y === head.y)) {
+        setGameRunning(false);
+        setGameOver(true);
+        if (score > highScore) setHighScore(score);
+        return currentSnake;
+      }
+
+      newSnake.unshift(head);
+
+      // Check food collision
+      if (head.x === food.x && head.y === food.y) {
+        setFood(generateFood());
+        setScore(prev => prev + 10);
+        // 30% chance to spawn sharingan after eating food
+        if (Math.random() < 0.3) {
+          setSharingan(generateSharingan());
+        }
+      } else {
+        // Check sharingan collision
+        if (sharingan.active && head.x === sharingan.x && head.y === sharingan.y) {
+          setScore(prev => prev + 50);
+          setSharingan({ ...sharingan, active: false });
+          // Grow snake by 3 segments
+          for (let i = 0; i < 3; i++) {
+            newSnake.push({ ...newSnake[newSnake.length - 1] });
+          }
+        } else {
+          newSnake.pop();
+        }
+      }
+
+      return newSnake;
+    });
+  }, [direction, food, sharingan, gameRunning, gameOver, score, highScore, generateFood, generateSharingan]);
+
+  useEffect(() => {
+    if (gameRunning && !gameOver) {
+      gameLoopRef.current = setInterval(moveSnake, GAME_SPEED);
+    } else {
+      clearInterval(gameLoopRef.current);
+    }
+
+    return () => clearInterval(gameLoopRef.current);
+  }, [moveSnake, gameRunning, gameOver]);
+
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (!gameRunning) return;
+      
+      switch (e.key) {
+        case 'ArrowUp':
+          if (direction.y === 0) setDirection({ x: 0, y: -1 });
+          break;
+        case 'ArrowDown':
+          if (direction.y === 0) setDirection({ x: 0, y: 1 });
+          break;
+        case 'ArrowLeft':
+          if (direction.x === 0) setDirection({ x: -1, y: 0 });
+          break;
+        case 'ArrowRight':
+          if (direction.x === 0) setDirection({ x: 1, y: 0 });
+          break;
+        case ' ':
+          setGameRunning(!gameRunning);
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [direction, gameRunning]);
+
+  const SharinganIcon = () => (
+    <div className="relative w-full h-full">
+      <div className="absolute inset-0 rounded-full bg-red-600 border-2 border-red-800 animate-pulse"></div>
+      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-3/4 h-3/4 rounded-full bg-red-700 border border-red-900">
+        <div className="absolute top-1/4 left-1/4 w-1/2 h-1/2 rounded-full bg-black"></div>
+        <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 rounded-full bg-red-900 animate-spin" style={{ animationDuration: '3s' }}></div>
+      </div>
+    </div>
+  );
+
+  const SnakeHead = ({ rotation }) => (
+    <div 
+      className="relative w-full h-full transform transition-transform duration-100"
+      style={{ transform: `rotate(${rotation}deg)` }}
+    >
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-800 to-purple-900 rounded-lg shadow-lg border-2 border-purple-700">
+        <div className="absolute top-2 left-2 w-2 h-2 bg-red-500 rounded-full"></div>
+        <div className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></div>
+        <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 w-3 h-2 bg-red-600 rounded-b-full"></div>
+      </div>
+    </div>
+  );
+
+  const SnakeBody = () => (
+    <div className="w-full h-full bg-gradient-to-br from-purple-700 to-purple-800 rounded-lg shadow-inner border border-purple-600"></div>
+  );
+
+  const getRotation = () => {
+    if (direction.x === 1) return 0;
+    if (direction.x === -1) return 180;
+    if (direction.y === -1) return -90;
+    if (direction.y === 1) return 90;
+    return 0;
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-black flex flex-col items-center justify-center p-4">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-purple-500 to-red-500 mb-2">
+          ITACHI SNAKE
+        </h1>
+        <p className="text-purple-300 text-lg">Master the art of the Sharingan</p>
+      </div>
+
+      {/* Game Stats */}
+      <div className="flex justify-between w-full max-w-2xl mb-6">
+        <div className="bg-black bg-opacity-50 rounded-lg px-4 py-2 text-white">
+          <span className="font-semibold">Score: </span>{score}
+        </div>
+        <div className="bg-black bg-opacity-50 rounded-lg px-4 py-2 text-white">
+          <span className="font-semibold">High Score: </span>{highScore}
+        </div>
+        <div className="bg-black bg-opacity-50 rounded-lg px-4 py-2 text-white">
+          <span className="font-semibold">Length: </span>{snake.length}
+        </div>
+      </div>
+
+      {/* Game Board */}
+      <div 
+        className="grid bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-xl shadow-2xl border-2 border-purple-700"
+        style={{ 
+          gridTemplateColumns: `repeat(${GRID_SIZE}, 1fr)`,
+          gap: '2px',
+          width: 'min(90vw, 600px)',
+          height: 'min(90vw, 600px)',
+          aspectRatio: '1/1'
+        }}
+      >
+        {Array.from({ length: GRID_SIZE * GRID_SIZE }).map((_, index) => {
+          const x = index % GRID_SIZE;
+          const y = Math.floor(index / GRID_SIZE);
+          
+          // Check if current cell is snake head
+          if (snake[0] && snake[0].x === x && snake[0].y === y) {
+            return (
+              <div key={index} className="relative">
+                <SnakeHead rotation={getRotation()} />
+              </div>
+            );
+          }
+          
+          // Check if current cell is snake body
+          else if (snake.slice(1).some(segment => segment.x === x && segment.y === y)) {
+            return (
+              <div key={index} className="relative">
+                <SnakeBody />
+              </div>
+            );
+          }
+          
+          // Check if current cell is food
+          else if (food.x === x && food.y === y) {
+            return (
+              <div key={index} className="flex items-center justify-center">
+                <div className="w-full h-full bg-gradient-to-br from-red-500 to-red-700 rounded-full animate-pulse shadow-lg"></div>
+              </div>
+            );
+          }
+          
+          // Check if current cell is sharingan
+          else if (sharingan.active && sharingan.x === x && sharingan.y === y) {
+            return (
+              <div key={index} className="flex items-center justify-center">
+                <SharinganIcon />
+              </div>
+            );
+          }
+          
+          // Empty cell
+          else {
+            return <div key={index} className="w-full h-full bg-gray-800 opacity-30"></div>;
+          }
+        })}
+      </div>
+
+      {/* Game Over / Start Screen */}
+      {(gameOver || !gameRunning && !gameOver) && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-70">
+          <div className="bg-gray-900 p-8 rounded-xl shadow-2xl text-center border border-purple-700">
+            {gameOver ? (
+              <>
+                <h2 className="text-4xl font-bold text-red-500 mb-4">GAME OVER</h2>
+                <p className="text-xl text-white mb-2">Final Score: {score}</p>
+                <p className="text-lg text-purple-300 mb-6">High Score: {highScore}</p>
+                <button
+                  onClick={startGame}
+                  className="px-6 py-3 bg-gradient-to-r from-purple-600 to-red-600 text-white font-bold rounded-lg hover:from-purple-700 hover:to-red-700 transform hover:scale-105 transition-all duration-200 shadow-lg"
+                >
+                  PLAY AGAIN
+                </button>
+              </>
+            ) : (
+              <>
+                <h2 className="text-4xl font-bold text-purple-400 mb-4">ITACHI SNAKE</h2>
+                <p className="text-lg text-gray-300 mb-6">Collect red orbs for points. Find Sharingan for bonus points!</p>
+                <div className="flex flex-col gap-4 mb-6">
+                  <p className="text-purple-300">Use arrow keys to move</p>
+                  <p className="text-purple-300">Red orbs = 10 points</p>
+                  <p className="text-red-400">Sharingan = 50 points + extra length</p>
+                </div>
+                <button
+                  onClick={startGame}
+                  className="px-6 py-3 bg-gradient-to-r from-purple-600 to-red-600 text-white font-bold rounded-lg hover:from-purple-700 hover:to-red-700 transform hover:scale-105 transition-all duration-200 shadow-lg"
+                >
+                  START GAME
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Controls for Mobile */}
+      <div className="mt-6 md:hidden">
+        <div className="grid grid-cols-3 gap-2 w-32 mx-auto">
+          <div></div>
+          <button 
+            onClick={() => direction.y === 0 && setDirection({ x: 0, y: -1 })}
+            className="bg-purple-700 text-white p-3 rounded-lg active:bg-purple-800"
+          >
+            ↑
+          </button>
+          <div></div>
+          <button 
+            onClick={() => direction.x === 0 && setDirection({ x: -1, y: 0 })}
+            className="bg-purple-700 text-white p-3 rounded-lg active:bg-purple-800"
+          >
+            ←
+          </button>
+          <button 
+            onClick={() => setGameRunning(!gameRunning)}
+            className="bg-red-600 text-white p-3 rounded-lg active:bg-red-700"
+          >
+            {gameRunning ? 'Pause' : 'Play'}
+          </button>
+          <button 
+            onClick={() => direction.x === 0 && setDirection({ x: 1, y: 0 })}
+            className="bg-purple-700 text-white p-3 rounded-lg active:bg-purple-800"
+          >
+            →
+          </button>
+          <div></div>
+          <button 
+            onClick={() => direction.y === 0 && setDirection({ x: 0, y: 1 })}
+            className="bg-purple-700 text-white p-3 rounded-lg active:bg-purple-800"
+          >
+            ↓
+          </button>
+          <div></div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="mt-8 text-center">
+        <p className="text-purple-400 text-sm">Created by Chakri</p>
+        <div className="flex justify-center mt-2">
+          <div className="w-8 h-8">
+            <SharinganIcon />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default App;
+```
